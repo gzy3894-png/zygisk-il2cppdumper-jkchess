@@ -8,6 +8,7 @@
 #include "xdl.h"
 #include <cstring>
 #include <cstdio>
+#include <ctime>
 #include <unistd.h>
 #include <sys/system_properties.h>
 #include <dlfcn.h>
@@ -16,22 +17,52 @@
 #include <sys/mman.h>
 #include <linux/unistd.h>
 #include <array>
+#include <climits>
+
+static void write_status(const char *game_data_dir, const char *msg) {
+    // 方便用文件管理器确认模块是否注入成功（不依赖 logcat）
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "%s/files/il2cpp_dumper_status.txt", game_data_dir);
+    FILE *f = fopen(path, "a");
+    if (f) {
+        fprintf(f, "[%d] %s\n", (int) time(nullptr), msg);
+        fclose(f);
+        LOGI("status file: %s -> %s", path, msg);
+    } else {
+        LOGE("cannot write status file: %s (errno check permissions)", path);
+    }
+}
 
 void hack_start(const char *game_data_dir) {
+    LOGI("hack_start dir=%s tid=%d", game_data_dir, gettid());
+    write_status(game_data_dir, "hack_start: waiting for libil2cpp.so");
+
+    // 金铲铲等 Unity 游戏可能较晚才加载 il2cpp，原版只等 10 秒经常错过
     bool load = false;
-    for (int i = 0; i < 10; i++) {
+    const int max_wait_sec = 180; // 最多等 3 分钟
+    for (int i = 0; i < max_wait_sec; i++) {
         void *handle = xdl_open("libil2cpp.so", 0);
         if (handle) {
+            LOGI("found libil2cpp.so at attempt %d handle=%p", i, handle);
+            char buf[128];
+            snprintf(buf, sizeof(buf), "found libil2cpp.so at +%ds", i);
+            write_status(game_data_dir, buf);
             load = true;
             il2cpp_api_init(handle);
+            write_status(game_data_dir, "il2cpp_api_init done, dumping...");
             il2cpp_dump(game_data_dir);
+            write_status(game_data_dir, "dump finished (check dump.cs)");
             break;
         } else {
+            if (i % 10 == 0) {
+                LOGI("waiting libil2cpp.so... %d/%d sec", i, max_wait_sec);
+            }
             sleep(1);
         }
     }
     if (!load) {
-        LOGI("libil2cpp.so not found in thread %d", gettid());
+        LOGE("libil2cpp.so not found after %d sec, tid=%d", max_wait_sec, gettid());
+        write_status(game_data_dir, "FAIL: libil2cpp.so not found in 180s");
     }
 }
 

@@ -418,12 +418,25 @@ void il2cpp_dump(const char *outDir) {
     }
     LOGI("write dump file");
     auto outPath = std::string(outDir).append("/files/dump.cs");
+    LOGI("dump path: %s types=%zu", outPath.c_str(), outPuts.size());
     std::ofstream outStream(outPath);
+    if (!outStream.is_open()) {
+        LOGE("FAILED to open dump path: %s", outPath.c_str());
+        // 再试 files 不存在时直接写 data 根目录
+        auto altPath = std::string(outDir).append("/dump.cs");
+        LOGI("retry dump path: %s", altPath.c_str());
+        outStream.open(altPath);
+        if (!outStream.is_open()) {
+            LOGE("FAILED alt dump path too: %s", altPath.c_str());
+            return;
+        }
+        outPath = altPath;
+    }
     outStream << imageOutput.str();
     auto count = outPuts.size();
     for (int i = 0; i < count; ++i) {
         outStream << outPuts[i];
     }
     outStream.close();
-    LOGI("dump done!");
+    LOGI("dump done! -> %s", outPath.c_str());
 }

@@ -38,16 +38,22 @@ public:
     }
 
 private:
-    Api *api;
-    JNIEnv *env;
-    bool enable_hack;
-    char *game_data_dir;
-    void *data;
-    size_t length;
+    Api *api = nullptr;
+    JNIEnv *env = nullptr;
+    bool enable_hack = false;
+    char *game_data_dir = nullptr;
+    void *data = nullptr;
+    size_t length = 0;
 
     void preSpecialize(const char *package_name, const char *app_data_dir) {
-        if (strcmp(package_name, GamePackageName) == 0) {
-            LOGI("detect game: %s", package_name);
+        enable_hack = false;
+        // 每次进程 specialization 都打一条，方便确认 Zygisk 是否加载了本模块
+        LOGI("preSpecialize pkg=%s dir=%s target=%s",
+             package_name ? package_name : "(null)",
+             app_data_dir ? app_data_dir : "(null)",
+             GamePackageName);
+        if (package_name && strcmp(package_name, GamePackageName) == 0) {
+            LOGI("detect game: %s data=%s", package_name, app_data_dir);
             enable_hack = true;
             game_data_dir = new char[strlen(app_data_dir) + 1];
             strcpy(game_data_dir, app_data_dir);
